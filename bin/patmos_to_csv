@@ -1,0 +1,299 @@
+#! /usr/bin/env bash
+
+################################################################################
+#                                                                              #
+#  Description:                                                                #
+#                                                                              #
+#    This script converts an AVHRR calibration parameter file from the         #
+#    PATMOS-X project to a comma separated line with the fields                #
+#     . year              - year the coefficients were released                #
+#     . release           - release version                                    #
+#     . id_patmos         - satellite name (field !sat_name in the PATMOS-X    #
+#                           parameter file)                                    #
+#     . ch1_low_gain_s0   - low gain for channel 1 (!ch1 low gain S0)          #
+#     . ch1_low_gain_s1   - low gain for channel 1 (!ch1 low gain S1)          #
+#     . ch1_low_gain_s2   - low gain for channel 1 (!ch1 low gain S2)          #
+#     . ch1_high_gain_s0  - high gain for channel 1 (!ch1 high gain S0)        #
+#     . ch1_high_gain_s1  - high gain for channel 1 (!ch1 high gain S1)        #
+#     . ch1_high_gain_s2  - high gain for channel 1 (!ch1 high gain S2)        #
+#     . ch1_gain_switch   - gain switch for channel 1 (!ch1 count at which     #
+#                           gain switches)                                     #
+#     . ch1_c0            - deep space offset for channel 1 (!ch1_dark_count)  #
+#     . ch2_low_gain_s0   - low gain for channel 2 (!ch2 low gain S0)          #
+#     . ch2_low_gain_s1   - low gain for channel 2 (!ch2 low gain S1)          #
+#     . ch2_low_gain_s2   - low gain for channel 2 (!ch2 low gain S2)          #
+#     . ch2_high_gain_s0  - high gain for channel 2 (!ch2 high gain S0)        #
+#     . ch2_high_gain_s1  - high gain for channel 2 (!ch2 high gain S1)        #
+#     . ch2_high_gain_s2  - high gain for channel 2 (!ch2 high gain S2)        #
+#     . ch2_gain_switch   - gain switch for channel 2 (!ch2 count at which     #
+#                           gain switches)                                     #
+#     . ch2_c0            - deep space offset for channel 2 (!ch2_dark_count)  #
+#     . ch3a_low_gain_s0  - low gain for channel 3A (!ch3a low gain S0)        #
+#     . ch3a_low_gain_s1  - low gain for channel 3A (!ch3a low gain S1)        #
+#     . ch3a_low_gain_s2  - low gain for channel 3A (!ch3a low gain S2)        #
+#     . ch3a_high_gain_s0 - high gain for channel 3A (!ch3a high gain S0)      #
+#     . ch3a_high_gain_s1 - high gain for channel 3A (!ch3a high gain S1)      #
+#     . ch3a_high_gain_s2 - high gain for channel 3A (!ch3a high gain S2)      #
+#     . ch3a_gain_switch  - gain switch for channel 3A (!ch3a count at which   #
+#                           gain switches)                                     #
+#     . ch3a_c0           - deep space offset for channel 3A                   #
+#                           (!ch3a_dark_count)                                 #
+#                                                                              #
+#    Note: The coefficient files have to be 'clean', i.e. they must have       #
+#    exactly 1 low / high gain line per channel. The downloaded files may      #
+#    be inconsistent in that regard and require some manual interaction.       #
+#    Otherwise this script cannot provide properly extracted and converted     #
+#    values!                                                                   #
+#                                                                              #
+#                                                                              #
+#  Synopsis:                                                                   #
+#                                                                              #
+#    patmos_to_csv -y year [-r version] file                                   #
+#                                                                              #
+#    file                                                                      #
+#      File with the PATMOS-X coefficients.                                    #
+#                                                                              #
+#    -y | --year  year                                                         #
+#      4-digit year when the PATMOS-X coefficients were released.              #
+#                                                                              #
+#                                                                              #
+#  Options:                                                                    #
+#                                                                              #
+#    -r | --release  version                                                   #
+#      Release number of the coefficients; usually there is only one release   #
+#      per year (=> default: 1), but in case several parameter sets are        #
+#      pushed out in a single year this version number aims to differentiate.  #
+#                                                                              #
+#                                                                              #
+#  Exit codes:                                                                 #
+#                                                                              #
+#     0 - success                                                              #
+#     1 - failure                                                              #
+#                                                                              #
+#                                                                              #
+#  © 2020                                                                      #
+#  Remote Sensing Research Group                                               #
+#  Department of Geography                                                     #
+#  Hallerstrasse 12                                                            #
+#  3012 Bern - Switzerland                                                     #
+#                                                                              #
+#  All rights reserved, unauthorized reproduction prohibited.                  #
+#                                                                              #
+################################################################################
+
+
+script_name="$( basename "$0" )"
+script_date='2020-01-13'
+script_version='1.0.0'
+
+
+usage () {
+
+    #
+    # usage message
+    #
+        
+    cat <<EOF
+
+$script_name  $script_version  $script_date
+
+usage: $script_name -y year [-r release] file
+
+arguments:
+ file
+          file with the PATMOS-X coefficients
+
+ -y | --year year
+          year the PATMOS-X coefficients were released
+
+options:
+ -r | --release version
+          usually there is only one release of the PATMOS coefficients
+          per year; if there are multiple releases they can be separated
+          by this option (default: 1)
+
+EOF
+
+}
+
+
+parse_args () {
+
+    #
+    # read and check the arguments given on the command line
+    #
+    # side effects
+    #  - sets the variables
+    #     . $arg_file
+    #     . $arg_year
+    #     . $arg_release
+    #
+
+    # get arguments
+
+    local options opts_s opts_l
+    opts_s='r:y:'
+    opts_l='release:,year:'
+
+    local options=$( getopt --options "$opts_s" --longoptions "$opts_l" \
+        --name "$script_name" --shell "bash" -- "$@" )
+
+
+    # evaluate quoted expressions
+
+    eval set -- "$options"
+
+
+    # parse arguments
+
+    arg_year=''
+    arg_release='1'
+
+    while [ "$#" -gt 0 ]
+    do
+
+        case "$1" in
+
+	    -y|--year)
+		arg_year="$2"
+		shift ;;
+
+	    -r|--release)
+		arg_release="$2"
+		shift ;;
+
+            --)
+                shift
+                break ;;
+            *)
+                echo "warning: unknown option '$1'"
+
+        esac
+
+        shift
+
+    done
+
+
+    # get the file
+
+    if [ -z "$*" ]
+    then
+	usage
+	echo "error: file is missing"
+	exit 1
+    fi
+
+    arg_file="$1"
+    if [ ! -r "$arg_file" ]
+    then
+	echo "error: cannot read the file '$arg_file'"
+	exit 1
+    fi
+
+
+    # check if a year has been given
+
+    if [ -z "$arg_year" ]
+    then
+	usage
+	echo "error: year is missing"
+	exit 1
+    fi
+
+}
+
+
+main () {
+
+    parse_args "$@"
+    # echo "$arg_file"
+
+
+    # initialise the resulting string
+
+    line="${arg_year},${arg_release}"
+
+
+    # get the satellite
+
+    sat="$( grep 'sat_name' "$arg_file" | awk '{ print $1 }' )"
+
+
+    # get the channel 1 low / high gain coefficients, gain switch value
+
+    pat='ch1 low gain'
+    ch1_lo_gain_s0="$( grep "$pat" "$arg_file" | awk '{ print $1 }' )"
+    ch1_lo_gain_s1="$( grep "$pat" "$arg_file" | awk '{ print $2 }' )"
+    ch1_lo_gain_s2="$( grep "$pat" "$arg_file" | awk '{ print $3 }' )"
+
+    pat='ch1 high gain'
+    ch1_hi_gain_s0="$( grep "$pat" "$arg_file" | awk '{ print $1 }' )"
+    ch1_hi_gain_s1="$( grep "$pat" "$arg_file" | awk '{ print $2 }' )"
+    ch1_hi_gain_s2="$( grep "$pat" "$arg_file" | awk '{ print $3 }' )"
+
+    ch1_gain_switch="$( grep 'count at which' "$arg_file" | \
+        grep -e 'ch1' -e 'ch 1' | awk '{ print $1 }' )"
+
+
+    # get the channel 2 low / high gain coefficients, gain switch value
+
+    pat='ch2 low gain'
+    ch2_lo_gain_s0="$( grep "$pat" "$arg_file" | awk '{ print $1 }' )"
+    ch2_lo_gain_s1="$( grep "$pat" "$arg_file" | awk '{ print $2 }' )"
+    ch2_lo_gain_s2="$( grep "$pat" "$arg_file" | awk '{ print $3 }' )"
+
+    pat='ch2 high gain'
+    ch2_hi_gain_s0="$( grep "$pat" "$arg_file" | awk '{ print $1 }' )"
+    ch2_hi_gain_s1="$( grep "$pat" "$arg_file" | awk '{ print $2 }' )"
+    ch2_hi_gain_s2="$( grep "$pat" "$arg_file" | awk '{ print $3 }' )"
+
+    ch2_gain_switch="$( grep 'count at which' "$arg_file" | \
+        grep -e 'ch2' -e 'ch 2' | awk '{ print $1 }' )"
+
+
+    # get the channel 2 low / high gain coefficients, gain switch value
+
+    pat='ch3a low gain'
+    ch3_lo_gain_s0="$( grep "$pat" "$arg_file" | awk '{ print $1 }' )"
+    ch3_lo_gain_s1="$( grep "$pat" "$arg_file" | awk '{ print $2 }' )"
+    ch3_lo_gain_s2="$( grep "$pat" "$arg_file" | awk '{ print $3 }' )"
+
+    pat='ch3a high gain'
+    ch3_hi_gain_s0="$( grep "$pat" "$arg_file" | awk '{ print $1 }' )"
+    ch3_hi_gain_s1="$( grep "$pat" "$arg_file" | awk '{ print $2 }' )"
+    ch3_hi_gain_s2="$( grep "$pat" "$arg_file" | awk '{ print $3 }' )"
+
+    ch3_gain_switch="$( grep 'count at which' "$arg_file" | \
+        grep -e 'ch3a' -e 'ch 3a' | awk '{ print $1 }' )"
+
+
+    # get the dark counts
+
+    ch1_c0="$( grep 'ch1_dark_count' "$arg_file" | awk '{ print $1 }' )"
+    ch2_c0="$( grep 'ch2_dark_count' "$arg_file" | awk '{ print $1 }' )"
+    ch3_c0="$( grep 'ch3a_dark_count' "$arg_file" | awk '{ print $1 }' )"
+
+
+    # build and print the result
+
+    line="${line},${sat}"
+
+    line="${line},${ch1_lo_gain_s0},${ch1_lo_gain_s1},${ch1_lo_gain_s2}"
+    line="${line},${ch1_hi_gain_s0},${ch1_hi_gain_s1},${ch1_hi_gain_s2}"
+    line="${line},${ch1_gain_switch},${ch1_c0}"
+
+    line="${line},${ch2_lo_gain_s0},${ch2_lo_gain_s1},${ch2_lo_gain_s2}"
+    line="${line},${ch2_hi_gain_s0},${ch2_hi_gain_s1},${ch2_hi_gain_s2}"
+    line="${line},${ch2_gain_switch},${ch2_c0}"
+
+    line="${line},${ch3_lo_gain_s0},${ch3_lo_gain_s1},${ch3_lo_gain_s2}"
+    line="${line},${ch3_hi_gain_s0},${ch3_hi_gain_s1},${ch3_hi_gain_s2}"
+    line="${line},${ch3_gain_switch},${ch3_c0}"
+
+    echo "$line"
+
+}
+
+
+main "$@"
