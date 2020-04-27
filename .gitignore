@@ -1,0 +1,7 @@
+*~
+__pycache__/
+*.py[cod]
+bin/
+!bin/patmos_to_csv
+!bin/sample_patmos_access.py
+data/
