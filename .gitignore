@@ -1,7 +1,13 @@
+# backup files
 *~
+
+# python
 __pycache__/
 *.py[cod]
-bin/
-!bin/patmos_to_csv
-!bin/sample_patmos_access.py
+
+# patmos data - permission from Andrew Heidinger?
 data/
+
+# sample scripts
+bin/patmos_get_2013.py
+bin/patmos_get_ftp.py
